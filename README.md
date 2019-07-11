@@ -23,3 +23,5 @@ from amuse.couple import bridge
 gravity=bridge.Bridge()
 gravity.add_system(cluster_code, (galaxy_code,))
 gravity.add_system(galaxy_code,)
+
+And example can be found in test_cluster.py
