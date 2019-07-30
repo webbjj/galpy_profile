@@ -110,7 +110,7 @@ def evolve_cluster_in_galaxy(N,Mcluster,Rcluster,Rinit,Vinit, galaxy_code, dt, d
 
     #Setup cluster
     stars,converter=setup_cluster(N,Mcluster,Rcluster,Rinit,Vinit)
-    cluster_code=BHTree(converter,number_of_works=1)     #Change number of workers depending on CPUS available
+    cluster_code=BHTree(converter,number_of_workers=1)     #Change number of workers depending on CPUS available
     cluster_code.parameters.epsilon_squared = (3. | units.parsec)**2
     cluster_code.parameters.opening_angle=0.6
     cluster_code.parameters.timestep=dt
