@@ -19,7 +19,7 @@ class galpy_profile(LiteratureReferencesMixIn):
     .. [#] Bovy, J; ApJSS, Volume 216, Issue 2, article id. 29, 27 pp. (2015)
     
     """
-    def __init__(self,pot, t = 0. | units.Gyr, tgalpy = 0. | units.Gyr, ro=8, vo=220.):
+    def __init__(self,pot, t = 0. | units.Gyr, tgalpy = 0. | units.Gyr, ro=8, vo=220., reverse=False):
         LiteratureReferencesMixIn.__init__(self)
 
         #Galpy scaling parameters
@@ -36,12 +36,19 @@ class galpy_profile(LiteratureReferencesMixIn):
         #Depending on how the galpy potential is setup, one may want to define a different initial galpy time
         #from which to evolve the potential (e.g. negative times) 
         self.tgalpy=tgalpy.value_in(units.Gyr)/bovy_conversion.time_in_Gyr(ro=self.ro,vo=self.vo)
+        #Move galpy potential backwards in time?
+        self.reverse=reverse
 
     def evolve_model(self,t_end):
 
+        print('EVOLVE: ',self.model_time.value_in(units.Gyr),self.tgalpy,t_end.value_in(units.Gyr))
         dt=t_end-self.model_time
         self .model_time=t_end  
-        self.tgalpy+=dt.value_in(units.Gyr)/bovy_conversion.time_in_Gyr(ro=self.ro,vo=self.vo)
+
+        if self.reverse:
+            self.tgalpy-=dt.value_in(units.Gyr)/bovy_conversion.time_in_Gyr(ro=self.ro,vo=self.vo)
+        else:
+            self.tgalpy+=dt.value_in(units.Gyr)/bovy_conversion.time_in_Gyr(ro=self.ro,vo=self.vo)
 
     def get_potential_at_point(self,eps,x,y,z):
 
@@ -93,9 +100,11 @@ class galpy_profile(LiteratureReferencesMixIn):
 
 def setup_cluster(N,Mcluster,Rcluster,Rinit,Vinit):
 
+    #Create star cluster with origin at 0,0,0 and no net velocity
     converter=nbody_system.nbody_to_si(Mcluster,Rcluster)
     stars=new_plummer_sphere(N,converter)
 
+    #Place star cluster in Galactocentric position
     stars.x += Rinit[0]
     stars.y += Rinit[1]
     stars.z += Rinit[2]
@@ -106,12 +115,14 @@ def setup_cluster(N,Mcluster,Rcluster,Rinit,Vinit):
 
     return stars,converter
 
-def evolve_cluster_in_galaxy(N,Mcluster,Rcluster,Rinit,Vinit, galaxy_code, dt, dtout, tend):
+def evolve_cluster_in_galaxy(N,Mcluster,Rcluster,Rinit,Vinit, galaxy_code, dt, dtout, tend, epsilon):
 
     #Setup cluster
     stars,converter=setup_cluster(N,Mcluster,Rcluster,Rinit,Vinit)
+    stars.scale_to_standard(convert_nbody=converter, smoothing_length_squared = epsilon**2)
+
     cluster_code=BHTree(converter,number_of_workers=1)     #Change number of workers depending on CPUS available
-    cluster_code.parameters.epsilon_squared = (3. | units.parsec)**2
+    cluster_code.parameters.epsilon_squared = epsilon**2
     cluster_code.parameters.opening_angle=0.6
     cluster_code.parameters.timestep=dt
     cluster_code.particles.add_particles(stars)
@@ -146,6 +157,7 @@ def evolve_cluster_in_galaxy(N,Mcluster,Rcluster,Rinit,Vinit, galaxy_code, dt, d
         
         time = gravity.model_time
 
+    #Copy back to stars for final dataset
     channel_from_cluster_code_to_stars.copy()
     gravity.stop()
 
@@ -158,19 +170,26 @@ if __name__ == "__main__":
     Rcluster = 10. | units.parsec
     Rinit=[10.,0.,0.] | units.kpc
     Vinit=[0.,220.,0.] | units.km/units.s
+    epsilon=0,.75 | units.parsec
 
     #Setup star cluster simulation
+    #Simulation end time
     tend = 1000.0 | units.Myr
+    #Frequency of data output
     dtout=5.0 | units.Myr
+    #Frequency of star cluster gravity calculation
     dt = 1.0 | units.Myr
 
-    #Set Galactic Potential - note that initial galpy time can be set to a different value than model_time
+    #Set Galactic Potential 
+    #- note that initial galpy time can be set to a different value than model_time.
+    #- also can tell galpy potential to evolve backwards with reverse flag
     pot=potential.MWPotential2014
-    galaxy_code = galpy_profile(pot, tgalpy = 0. | units.Gyr)
+    galaxy_code = galpy_profile(pot, tgalpy = 0. | units.Gyr, reverse=False)
 
     #Evolve star cluster
-    stars = evolve_cluster_in_galaxy(N,Mcluster,Rcluster,Rinit,Vinit,galaxy_code, dt, dtout, tend)
+    stars = evolve_cluster_in_galaxy(N,Mcluster,Rcluster,Rinit,Vinit,galaxy_code, dt, dtout, tend, epsilon)
 
+    #Plot final snapshot
     plt.plot(stars.x.value_in(units.kpc),stars.y.value_in(units.kpc),'.')
     plt.xlabel('X (kpc)')
     plt.ylabel('Y (kpc)')
