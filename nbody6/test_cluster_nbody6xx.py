@@ -5,7 +5,7 @@ from amuse.lab import *
 from amuse.couple import bridge
 from amuse.support.literature import LiteratureReferencesMixIn
 from amuse.datamodel import Particles
-from amuse.community.ph4.interface import ph4
+from amuse.community.nbody6xx.interface import Nbody6xx
 
 from galpy import potential
 from galpy.util import bovy_conversion
@@ -36,10 +36,10 @@ def evolve_cluster_in_galaxy(N,Mcluster,Rcluster,Rinit,Vinit, galaxy_code, dt, d
     stars,converter=setup_cluster(N,Mcluster,Rcluster,Rinit,Vinit)
     stars.scale_to_standard(convert_nbody=converter, smoothing_length_squared = epsilon**2)
 
-    cluster_code=ph4()
+    cluster_code=Nbody6xx(converter,number_of_workers=1)
     cluster_code.initialize_code()
-    cluster_code.parameters.set_defaults()
     cluster_code.particles.add_particles(stars)
+    cluster_code.commit_particles()
 
     #Setup channels between stars particle dataset and the cluster code
     channel_from_stars_to_cluster_code=stars.new_channel_to(cluster_code.particles, attributes=["mass", "x", "y", "z", "vx", "vy", "vz"])    
@@ -52,24 +52,11 @@ def evolve_cluster_in_galaxy(N,Mcluster,Rcluster,Rinit,Vinit, galaxy_code, dt, d
     #galaxy_code still needs to be added to system so it evolves with time
     gravity.add_system(galaxy_code,)
     #Set how often to update external potential
-    gravity.timestep = cluster_code.parameters.timestep/2.
+    gravity.timestep = dt/2.
 
     time=0.0 | tend.unit
-    while time<tend:
-        print(time.value_in(units.Myr),tend.value_in(units.Myr))
-        gravity.evolve_model(time+dt)
-
-        #You need to copy stars from cluster_code to output or analyse:
-
-        #channel_from_cluster_code_to_stars.copy()
-        #Output/Analyse
-            
-        #If you edited the stars particle set, lets say to remove stars from the array because they have 
-        #been kicked far from the cluster, you need to copy the array back to cluster_code:
-            
-        #channel_from_stars_to_cluster_code.copy()
-        
-        time = gravity.model_time
+    gravity.evolve_model(tend)     
+    time = gravity.model_time
 
     #Copy back to stars for final dataset
     channel_from_cluster_code_to_stars.copy()
@@ -82,13 +69,13 @@ if __name__ == "__main__":
     N=1000
     Mcluster=1000. | units.MSun
     Rcluster = 10. | units.parsec
-    Rinit=[10.,0.,0.] | units.kpc
-    Vinit=[0.,220.,0.] | units.km/units.s
+    Rinit=[0.,0.,0.] | units.kpc
+    Vinit=[0.,0.,0.] | units.km/units.s
     epsilon=0.75 | units.parsec
 
     #Setup star cluster simulation
     #Simulation end time
-    tend = 1000.0 | units.Myr
+    tend = 100.0 | units.Myr
     #Frequency of data output
     dtout=5.0 | units.Myr
     #Frequency of star cluster gravity calculation
